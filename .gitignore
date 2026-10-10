@@ -1,0 +1,37 @@
+# Python environments, builds and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Local data and execution artifacts
+demo_data/
+demo_output/
+data/
+profiles/
+*.log
+*.attempt-*
+.csv-result-*.tmp
+/benchmark_results*.json
+/benchmarks/results/*.json
+!/benchmarks/results/2026-10-09-baseline.json
+!/benchmarks/results/2026-10-10-local.json
+
+# Local configuration and credentials
+.env
+.env.*
+.aws/
+.codex/
+.agents/
+*.pem
+*.key
+.idea/
+.vscode/
+.DS_Store
+*~
+*.swp

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "distributed-task-scheduler"
+version = "1.0.0"
+description = "A distributed CSV task scheduler with gRPC workers, bounded retries, and benchmarks."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = ["grpcio>=1.84", "protobuf>=7.35.1", "prometheus-client>=0.22"]
+
+[project.optional-dependencies]
+dev = ["grpcio-tools>=1.84", "pytest>=8.4", "ruff>=0.11", "psutil>=7"]
+
+[project.scripts]
+distributed-scheduler = "distributed_scheduler.cli:main"
+
+[tool.setuptools]
+packages = ["distributed_scheduler", "benchmarks", "examples"]
+py-modules = ["cli"]
+
+[tool.setuptools.package-data]
+distributed_scheduler = ["*.proto"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: separate-process fault injection (local TCP required)"]
+
+[tool.ruff]
+target-version = "py310"
+extend-exclude = ["distributed_jobs_pb2.py", "distributed_jobs_pb2_grpc.py"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

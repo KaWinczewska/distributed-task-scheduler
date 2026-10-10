@@ -1,0 +1,37 @@
+x-worker: &worker
+  build: .
+  environment:
+    WORKER_CAPACITY: ${WORKER_CAPACITY:-2}
+  volumes:
+    - ./data:/data
+  depends_on:
+    coordinator:
+      condition: service_healthy
+
+services:
+  coordinator:
+    build: .
+    command: ["coordinator", "50051"]
+    environment:
+      SCHEDULER: ${SCHEDULER:-first-available}
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      METRICS_PORT: "8000"
+    ports:
+      - "50051:50051"
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "python", "cli.py", "metrics", "localhost", "50051"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+  worker1:
+    <<: *worker
+    command: ["worker", "coordinator", "50051", "worker1", "50052"]
+  worker2:
+    <<: *worker
+    command: ["worker", "coordinator", "50051", "worker2", "50052"]
+  worker3:
+    <<: *worker
+    command: ["worker", "coordinator", "50051", "worker3", "50052"]

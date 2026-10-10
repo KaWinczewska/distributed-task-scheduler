@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package distributedjobs;
+
+option java_multiple_files = true;
+option java_package = "com.example.distributedjobs.proto";
+
+service CoordinatorService {
+  rpc SubmitJob(SubmitJobRequest) returns (SubmitJobResponse);
+  rpc GetJobStatus(GetJobStatusRequest) returns (GetJobStatusResponse);
+  rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc GetMetrics(MetricsRequest) returns (MetricsResponse);
+}
+
+service WorkerService {
+  rpc ExecuteJob(ExecuteJobRequest) returns (ExecuteJobResponse);
+}
+
+message SubmitJobRequest {
+  string input_path = 1;
+  string output_path = 2;
+}
+
+message SubmitJobResponse {
+  string job_id = 1;
+}
+
+message GetJobStatusRequest {
+  string job_id = 1;
+}
+
+message GetJobStatusResponse {
+  JobStatus status = 1;
+}
+
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;
+  RUNNING = 2;
+  COMPLETED = 3;
+  FAILED = 4;
+}
+
+message RegisterWorkerRequest {
+  int32 max_concurrent_jobs = 3;
+  string session_id = 4;
+  string host = 1;
+  int32 port = 2;
+}
+
+message RegisterWorkerResponse {}
+
+message HeartbeatRequest {
+  string session_id = 3;
+  string host = 1;
+  int32 port = 2;
+}
+
+message HeartbeatResponse {}
+
+message ExecuteJobRequest {
+  string attempt_id = 3;
+  string input_path = 1;
+  string output_path = 2;
+}
+
+message ExecuteJobResponse {
+  bool success = 1;
+  string error_message = 2;
+  double execution_seconds = 3;
+  bool retryable = 4;
+}
+
+message MetricsRequest {}
+message MetricsResponse { string json = 1; }

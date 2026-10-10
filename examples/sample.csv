@@ -1,0 +1,5 @@
+timestamp,user_id,endpoint,status_code,response_time_ms
+2026-10-06T18:42:01Z,user_1,/api/search,200,100
+2026-10-06T18:42:02Z,user_2,/api/products,302,200
+2026-10-06T18:42:03Z,user_1,/api/search,404,300
+2026-10-06T18:42:04Z,user_3,/api/orders,500,500
