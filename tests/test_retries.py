@@ -10,33 +10,32 @@ from distributed_scheduler.coordinator import Coordinator
 from distributed_scheduler.worker import Worker
 
 
-@pytest.mark.parametrize("policy",
-                         ["first-available", "round-robin", "least-loaded"])
+@pytest.mark.parametrize("policy", ["first-available", "round-robin", "least-loaded"])
 def test_delayed_retry_allows_ready_fifo_jobs(tmp_path, policy):
     starts = []
 
     def execute(source, target):
         starts.append((source, time.perf_counter()))
-        if source == "retry" and len([s for s, _ in starts if s == source
-                                     ]) == 1:
+        if source == "retry" and len([s for s, _ in starts if s == source]) == 1:
             raise TimeoutError("retry later")
         Path(target).write_text("{}")
 
-    with Coordinator(0, scheduler=policy, retry_backoff=0.3) as coordinator, \
-            Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, execute):
+    with (
+        Coordinator(0, scheduler=policy, retry_backoff=0.3) as coordinator,
+        Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, execute),
+    ):
         client = Client(coordinator.port)
         try:
             retry = client.submit("retry", tmp_path / "retry.json")
             await_until(lambda: coordinator.metrics()["retries"] == 1)
             with coordinator.lock:
                 deadline = coordinator.jobs[retry].ready_at
+
             first = client.submit("first", tmp_path / "first.json")
             second = client.submit("second", tmp_path / "second.json")
-            await_until(lambda: all(
-                client.status(j) == messages.COMPLETED
-                for j in (retry, first, second)))
-            assert [source for source, _ in starts
-                   ] == ["retry", "first", "second", "retry"]
+            await_until(lambda: all(client.status(j) == messages.COMPLETED for j in (retry, first, second)))
+
+            assert [source for source, _ in starts] == ["retry", "first", "second", "retry"]
             assert starts[1][1] < deadline
             assert starts[-1][1] >= deadline
         finally:
@@ -60,6 +59,7 @@ def test_retries_use_deadline_order_and_condition_wait(tmp_path, monkeypatch):
         try:
             first = client.submit("first", tmp_path / "first.json")
             second = client.submit("second", tmp_path / "second.json")
+
             # Inject failed attempts under the normal scheduler lock, without a worker.
             with coordinator.changed:
                 coordinator.pending.clear()
@@ -67,9 +67,7 @@ def test_retries_use_deadline_order_and_condition_wait(tmp_path, monkeypatch):
                     job = coordinator.jobs[key]
                     job.attempt = attempt
                     coordinator._requeue(job, "injected failure")
-                deadlines = {
-                    j: coordinator.jobs[j].ready_at for j in (first, second)
-                }
+                deadlines = {j: coordinator.jobs[j].ready_at for j in (first, second)}
                 coordinator.changed.notify_all()
             assert waiting.wait(2)
 
@@ -78,15 +76,13 @@ def test_retries_use_deadline_order_and_condition_wait(tmp_path, monkeypatch):
                 Path(target).write_text("{}")
 
             with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, execute):
-                await_until(lambda: all(
-                    client.status(j) == messages.COMPLETED
-                    for j in (first, second)))
+                await_until(lambda: all(client.status(j) == messages.COMPLETED for j in (first, second)))
+
             assert [source for source, _ in starts] == ["second", "first"]
             assert starts[0][1] >= deadlines[second]
             assert starts[1][1] >= deadlines[first]
             # A spin loop would produce thousands of waits; allow heartbeat/monitor notifications.
             assert len(waits) < 30
-            assert any(
-                timeout is not None and timeout > 0.1 for timeout in waits)
+            assert any(timeout is not None and timeout > 0.1 for timeout in waits)
         finally:
             client.close()

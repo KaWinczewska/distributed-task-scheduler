@@ -1,4 +1,5 @@
 """Worker selection; the coordinator owns FIFO ordering and synchronization."""
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -7,9 +8,7 @@ if TYPE_CHECKING:
 POLICIES = ("first-available", "round-robin", "least-loaded")
 
 
-def select_worker(workers: list["Worker"],
-                  policy: str,
-                  previous: str | None = None) -> "Worker | None":
+def select_worker(workers: list["Worker"], policy: str, previous: str | None = None) -> "Worker | None":
     """Select in O(W), breaking ties by address independently of registration timing."""
     available = [worker for worker in workers if worker.available_capacity > 0]
 
@@ -17,10 +16,7 @@ def select_worker(workers: list["Worker"],
         return None
 
     if policy == "least-loaded":
-        return min(
-            available,
-            key=lambda worker:
-            (worker.active_jobs / worker.max_concurrent_jobs, worker.key))
+        return min(available, key=lambda worker: (worker.active_jobs / worker.max_concurrent_jobs, worker.key))
 
     if policy == "round-robin" and previous is not None:
         following = [worker for worker in available if worker.key > previous]

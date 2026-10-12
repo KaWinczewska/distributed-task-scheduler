@@ -15,6 +15,7 @@ class SchedulerCollector:
 
     def collect(self):
         snapshot = self.coordinator.metrics()
+
         for event in ("submitted", "completed", "failed", "retried"):
             key = "retries" if event == "retried" else event
             yield CounterMetricFamily(
@@ -22,13 +23,14 @@ class SchedulerCollector:
                 f"Jobs {event} since coordinator startup.",
                 value=snapshot[key],
             )
+
         for status in ("pending", "running"):
             yield GaugeMetricFamily(
                 f"scheduler_jobs_{status}",
                 f"Jobs currently {status}.",
-                value=sum(job["status"] == status.upper()
-                          for job in snapshot["jobs"]),
+                value=sum(job["status"] == status.upper() for job in snapshot["jobs"]),
             )
+
         yield GaugeMetricFamily(
             "scheduler_active_workers",
             "Registered live workers.",
@@ -36,11 +38,10 @@ class SchedulerCollector:
         )
 
 
-def create_metrics(
-    coordinator: "Coordinator"
-) -> tuple[CollectorRegistry, Histogram, Histogram]:
+def create_metrics(coordinator: "Coordinator") -> tuple[CollectorRegistry, Histogram, Histogram]:
     registry = CollectorRegistry()
     registry.register(SchedulerCollector(coordinator))
+
     buckets = (0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300)
     duration = Histogram(
         "scheduler_job_duration_seconds",
@@ -54,4 +55,5 @@ def create_metrics(
         buckets=buckets,
         registry=registry,
     )
+
     return registry, duration, queue

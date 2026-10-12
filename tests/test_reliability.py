@@ -12,8 +12,7 @@ from distributed_scheduler.csv_processor import process
 from distributed_scheduler.worker import Worker
 
 
-@pytest.mark.parametrize("policy",
-                         ["first-available", "round-robin", "least-loaded"])
+@pytest.mark.parametrize("policy", ["first-available", "round-robin", "least-loaded"])
 def test_capacity_fifo_and_concurrent_submissions(tmp_path, policy):
     release = threading.Event()
     full = threading.Event()
@@ -41,32 +40,18 @@ def test_capacity_fifo_and_concurrent_submissions(tmp_path, policy):
             client = Client(coordinator.port)
             try:
                 with ThreadPoolExecutor(max_workers=8) as submitters:
-                    ids = list(
-                        submitters.map(
-                            lambda i: client.submit(str(i), tmp_path /
-                                                    f"{i}.json"), range(12)))
-                assert all(
-                    client.status(key) == messages.PENDING for key in ids)
+                    ids = list(submitters.map(lambda i: client.submit(str(i), tmp_path / f"{i}.json"), range(12)))
+                assert all(client.status(key) == messages.PENDING for key in ids)
                 expected = [job.input for job in coordinator.jobs.values()]
-                with Worker("127.0.0.1",
-                            coordinator.port,
-                            "127.0.0.1",
-                            0,
-                            execute,
-                            max_concurrent_jobs=2):
+                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, execute, max_concurrent_jobs=2):
                     assert full.wait(3)
                     with coordinator.lock:
-                        assert next(iter(
-                            coordinator.workers.values())).active_jobs == 2
+                        assert next(iter(coordinator.workers.values())).active_jobs == 2
                         assert [
-                            job.input
-                            for job in coordinator.jobs.values()
-                            if job.status == messages.RUNNING
+                            job.input for job in coordinator.jobs.values() if job.status == messages.RUNNING
                         ] == expected[:2]
                     release.set()
-                    await_until(lambda: all(
-                        client.status(key) == messages.COMPLETED for key in ids)
-                               )
+                    await_until(lambda: all(client.status(key) == messages.COMPLETED for key in ids))
                     assert peak == 2
                     assert coordinator.metrics()["submitted"] == 12
             finally:
@@ -83,8 +68,10 @@ def test_retry_limit_and_transient_backoff(tmp_path):
         attempts += 1
         raise TimeoutError("temporary")
 
-    with Coordinator(0, max_retries=2, retry_backoff=0.01) as coordinator, \
-         Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, transient):
+    with (
+        Coordinator(0, max_retries=2, retry_backoff=0.01) as coordinator,
+        Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, transient),
+    ):
         client = Client(coordinator.port)
         try:
             key = client.submit("input", tmp_path / "out.json")
@@ -99,8 +86,7 @@ def test_retry_limit_and_transient_backoff(tmp_path):
 def test_permanent_csv_error_is_not_retried(tmp_path):
     source = tmp_path / "invalid.csv"
     source.write_text("wrong,header\n")
-    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port,
-                                               "127.0.0.1", 0):
+    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
         client = Client(coordinator.port)
         try:
             key = client.submit(source, tmp_path / "out.json")
@@ -123,24 +109,17 @@ def test_timeout_reassignment_fences_late_output(tmp_path):
         wrote.set()
 
     try:
-        with Coordinator(0,
-                         heartbeat_timeout=0.15,
-                         scan_interval=0.01,
-                         retry_backoff=0) as coordinator:
+        with Coordinator(0, heartbeat_timeout=0.15, scan_interval=0.01, retry_backoff=0) as coordinator:
             client = Client(coordinator.port)
             try:
-                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0,
-                            late) as old:
+                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, late) as old:
                     target = tmp_path / "out.json"
-                    key = client.submit(sample_csv(tmp_path / "input.csv"),
-                                        target)
+                    key = client.submit(sample_csv(tmp_path / "input.csv"), target)
                     assert started.wait(3)
-                    old.stopping.set(
-                    )  # lose heartbeats while computation continues
+                    old.stopping.set()  # lose heartbeats while computation continues
                     await_until(lambda: coordinator.worker_count == 0)
                     with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
-                        await_until(
-                            lambda: client.status(key) == messages.COMPLETED)
+                        await_until(lambda: client.status(key) == messages.COMPLETED)
                         authoritative = target.read_bytes()
                         release.set()
                         assert wrote.wait(3)
@@ -166,16 +145,13 @@ def test_crash_during_processing_reassigns(tmp_path):
         with Coordinator(0, retry_backoff=0) as coordinator:
             client = Client(coordinator.port)
             try:
-                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0,
-                            blocked) as broken:
-                    key = client.submit(sample_csv(tmp_path / "input.csv"),
-                                        tmp_path / "out.json")
+                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, blocked) as broken:
+                    key = client.submit(sample_csv(tmp_path / "input.csv"), tmp_path / "out.json")
                     assert started.wait(3)
                     broken.close()
                     await_until(lambda: client.status(key) == messages.PENDING)
                     with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
-                        await_until(
-                            lambda: client.status(key) == messages.COMPLETED)
+                        await_until(lambda: client.status(key) == messages.COMPLETED)
                     release.set()
             finally:
                 client.close()
@@ -184,12 +160,10 @@ def test_crash_during_processing_reassigns(tmp_path):
 
 
 def test_duplicate_and_old_attempt_are_not_current(tmp_path):
-    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port,
-                                               "127.0.0.1", 0):
+    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
         client = Client(coordinator.port)
         try:
-            key = client.submit(sample_csv(tmp_path / "input.csv"),
-                                tmp_path / "out.json")
+            key = client.submit(sample_csv(tmp_path / "input.csv"), tmp_path / "out.json")
             await_until(lambda: client.status(key) == messages.COMPLETED)
             with coordinator.lock:
                 job = coordinator.jobs[key]
@@ -199,10 +173,9 @@ def test_duplicate_and_old_attempt_are_not_current(tmp_path):
             duplicate = tmp_path / "duplicate.json"
             duplicate.write_text('{"stale": true}')
             coordinator._accept_result(
-                job, worker, job.attempt,
-                messages.ExecuteJobResponse(success=True), str(duplicate))
-            assert json.loads(
-                (tmp_path / "out.json").read_text())["totalRequests"] == 4
+                job, worker, job.attempt, messages.ExecuteJobResponse(success=True), str(duplicate)
+            )
+            assert json.loads((tmp_path / "out.json").read_text())["totalRequests"] == 4
             assert duplicate.exists()
             assert coordinator.metrics()["completed"] == 1
         finally:
@@ -211,22 +184,20 @@ def test_duplicate_and_old_attempt_are_not_current(tmp_path):
 
 def test_csv_quotes_and_empty_data(tmp_path):
     source = tmp_path / "quoted.csv"
-    source.write_text(
-        'timestamp,user_id,endpoint,status_code,response_time_ms\nt,"a,b","/a,b",200,10\n'
-    )
+    source.write_text('timestamp,user_id,endpoint,status_code,response_time_ms\nt,"a,b","/a,b",200,10\n')
     target = tmp_path / "out.json"
     process(str(source), str(target))
     assert json.loads(target.read_text())["requestsByEndpoint"] == {"/a,b": 1}
-    source.write_text(
-        "timestamp,user_id,endpoint,status_code,response_time_ms\n")
+
+    source.write_text("timestamp,user_id,endpoint,status_code,response_time_ms\n")
     process(str(source), str(target))
     assert json.loads(target.read_text())["totalRequests"] == 0
     assert target.stat().st_mode & 0o777 == 0o644
 
 
-def test_publication_claim_survives_timeout_without_holding_scheduler_lock(
-        tmp_path, monkeypatch):
+def test_publication_claim_survives_timeout_without_holding_scheduler_lock(tmp_path, monkeypatch):
     import distributed_scheduler.coordinator as module
+
     entered, release = threading.Event(), threading.Event()
     replace = module.os.replace
 
@@ -244,21 +215,18 @@ def test_publication_claim_survives_timeout_without_holding_scheduler_lock(
                 def execute(source, target):
                     Path(target).write_text("{}")
 
-                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0,
-                            execute):
+                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, execute):
                     key = client.submit("input", tmp_path / "out.json")
                     assert entered.wait(3)
                     # Status RPC and invalidation remain responsive during filesystem I/O.
                     assert client.status(key) == messages.RUNNING
                     with coordinator.changed:
                         worker = next(iter(coordinator.workers.values()))
-                        coordinator._remove_worker(
-                            worker, "timeout during publication")
+                        coordinator._remove_worker(worker, "timeout during publication")
                         assert coordinator.jobs[key].publishing
                         assert not coordinator.pending
                     release.set()
-                    await_until(
-                        lambda: client.status(key) == messages.COMPLETED)
+                    await_until(lambda: client.status(key) == messages.COMPLETED)
                     assert coordinator.metrics()["retries"] == 0
             finally:
                 client.close()
@@ -268,19 +236,12 @@ def test_publication_claim_survives_timeout_without_holding_scheduler_lock(
 
 def test_old_session_heartbeat_does_not_refresh_replacement():
     with Coordinator(0, heartbeat_timeout=10) as coordinator:
-        coordinator.RegisterWorker(
-            messages.RegisterWorkerRequest(host="host",
-                                           port=1,
-                                           session_id="new"), None)
+        coordinator.RegisterWorker(messages.RegisterWorkerRequest(host="host", port=1, session_id="new"), None)
         worker = coordinator.workers["host:1"]
         previous = worker.last_heartbeat
-        coordinator.Heartbeat(
-            messages.HeartbeatRequest(host="host", port=1, session_id="old"),
-            None)
+        coordinator.Heartbeat(messages.HeartbeatRequest(host="host", port=1, session_id="old"), None)
         assert worker.last_heartbeat == previous
-        coordinator.Heartbeat(
-            messages.HeartbeatRequest(host="host", port=1, session_id="new"),
-            None)
+        coordinator.Heartbeat(messages.HeartbeatRequest(host="host", port=1, session_id="new"), None)
         assert worker.last_heartbeat >= previous
 
 
@@ -288,6 +249,7 @@ def test_worker_rejects_calls_beyond_capacity(tmp_path):
     import grpc
 
     from distributed_scheduler import distributed_jobs_pb2_grpc as services
+
     started, release = threading.Event(), threading.Event()
 
     def blocked(source, target):
@@ -296,18 +258,20 @@ def test_worker_rejects_calls_beyond_capacity(tmp_path):
         Path(target).write_text("{}")
 
     try:
-        with Coordinator(0) as coordinator, \
-             Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, blocked) as worker, \
-             grpc.insecure_channel(f"127.0.0.1:{worker.port}") as channel:
+        with (
+            Coordinator(0) as coordinator,
+            Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, blocked) as worker,
+            grpc.insecure_channel(f"127.0.0.1:{worker.port}") as channel,
+        ):
             stub = services.WorkerServiceStub(channel)
             first = stub.ExecuteJob.future(
-                messages.ExecuteJobRequest(input_path="input",
-                                           output_path=str(tmp_path / "first")))
+                messages.ExecuteJobRequest(input_path="input", output_path=str(tmp_path / "first"))
+            )
             assert started.wait(3)
             with pytest.raises(grpc.RpcError) as failure:
-                stub.ExecuteJob(messages.ExecuteJobRequest(
-                    input_path="input", output_path=str(tmp_path / "second")),
-                                timeout=2)
+                stub.ExecuteJob(
+                    messages.ExecuteJobRequest(input_path="input", output_path=str(tmp_path / "second")), timeout=2
+                )
             assert failure.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
             release.set()
             assert first.result(timeout=3).success
@@ -315,27 +279,32 @@ def test_worker_rejects_calls_beyond_capacity(tmp_path):
         release.set()
 
 
-@pytest.mark.parametrize("data", [
-    b"",
-    b"wrong,header\n",
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200\n",
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200,1,extra\n",
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,,1\n",
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,99,1\n",
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,600,1\n",
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200,-1\n",
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200,1.5\n",
-    b'timestamp,user_id,endpoint,status_code,response_time_ms\nt,"unclosed,/a,200,1\n',
-    b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,\xff,/a,200,1\n",
-])
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"",
+        b"wrong,header\n",
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200\n",
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200,1,extra\n",
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,,1\n",
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,99,1\n",
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,600,1\n",
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200,-1\n",
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,u,/a,200,1.5\n",
+        b'timestamp,user_id,endpoint,status_code,response_time_ms\nt,"unclosed,/a,200,1\n',
+        b"timestamp,user_id,endpoint,status_code,response_time_ms\nt,\xff,/a,200,1\n",
+    ],
+)
 def test_invalid_csv_preserves_existing_output(tmp_path, data):
     import csv
 
     source, target = tmp_path / "bad.csv", tmp_path / "out.json"
     source.write_bytes(data)
     target.write_text('{"previous":true}')
+
     with pytest.raises((ValueError, csv.Error)):
         process(str(source), str(target))
+
     assert target.read_text() == '{"previous":true}'
     assert not list(tmp_path.glob(".csv-result-*.tmp"))
 
@@ -359,46 +328,34 @@ def test_all_workers_lost_requeues_multiple_running_jobs(tmp_path):
             client = Client(coordinator.port)
             try:
                 source = sample_csv(tmp_path / "input.csv")
-                with Worker("127.0.0.1",
-                            coordinator.port,
-                            "127.0.0.1",
-                            0,
-                            blocked,
-                            max_concurrent_jobs=2) as broken:
-                    keys = [
-                        client.submit(source, tmp_path / f"{i}.json")
-                        for i in range(4)
-                    ]
+                with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, blocked, max_concurrent_jobs=2) as broken:
+                    keys = [client.submit(source, tmp_path / f"{i}.json") for i in range(4)]
                     assert both_started.wait(3)
                     broken.close()
-                    await_until(lambda: coordinator.worker_count == 0 and all(
-                        client.status(key) == messages.PENDING for key in keys))
+                    await_until(
+                        lambda: (
+                            coordinator.worker_count == 0
+                            and all(client.status(key) == messages.PENDING for key in keys)
+                        )
+                    )
                     snapshot = coordinator.metrics()
                     assert snapshot["retries"] == 2
                     assert snapshot["submitted"] == 4
                     assert snapshot["failed"] == snapshot["completed"] == 0
                     release.set()
                     with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
-                        await_until(lambda: all(
-                            client.status(key) == messages.COMPLETED
-                            for key in keys))
-                        assert sorted(
-                            coordinator.jobs[key].attempt for key in keys) == [
-                                1, 1, 2, 2
-                            ]
+                        await_until(lambda: all(client.status(key) == messages.COMPLETED for key in keys))
+                        assert sorted(coordinator.jobs[key].attempt for key in keys) == [1, 1, 2, 2]
                         assert all(
-                            json.loads((
-                                tmp_path /
-                                f"{i}.json").read_text())["totalRequests"] == 4
-                            for i in range(4))
+                            json.loads((tmp_path / f"{i}.json").read_text())["totalRequests"] == 4 for i in range(4)
+                        )
             finally:
                 client.close()
     finally:
         release.set()
 
 
-def test_publication_error_fails_once_and_preserves_previous_output(
-        tmp_path, monkeypatch):
+def test_publication_error_fails_once_and_preserves_previous_output(tmp_path, monkeypatch):
     import distributed_scheduler.coordinator as module
 
     target = tmp_path / "out.json"
@@ -411,14 +368,12 @@ def test_publication_error_fails_once_and_preserves_previous_output(
         return replace(source, destination)
 
     monkeypatch.setattr(module.os, "replace", fail_final_publication)
-    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port,
-                                               "127.0.0.1", 0):
+    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
         client = Client(coordinator.port)
         try:
             key = client.submit(sample_csv(tmp_path / "input.csv"), target)
             await_until(lambda: client.status(key) == messages.FAILED)
-            assert coordinator.jobs[
-                key].error == "publication failed: publication denied"
+            assert coordinator.jobs[key].error == "publication failed: publication denied"
             assert coordinator.jobs[key].attempt == 1
             assert coordinator.metrics()["retries"] == 0
             assert target.read_text() == '{"previous":true}'
@@ -446,8 +401,7 @@ def test_worker_close_waits_for_heartbeat_before_closing_channel(monkeypatch):
             original_close = worker.channel.close
 
             def observed_close():
-                channel_close_observations.append(
-                    heartbeat_threads[0].is_alive())
+                channel_close_observations.append(heartbeat_threads[0].is_alive())
                 original_close()
 
             monkeypatch.setattr(worker.channel, "close", observed_close)
@@ -475,8 +429,7 @@ def test_worker_close_releases_idle_rpc_thread(tmp_path):
         Path(target).write_text("{}")
 
     with Coordinator(0) as coordinator:
-        worker = Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0,
-                        execute).start()
+        worker = Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, execute).start()
         client = Client(coordinator.port)
         try:
             key = client.submit("input", tmp_path / "out.json")
