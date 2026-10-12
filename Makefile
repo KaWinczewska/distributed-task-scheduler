@@ -1,4 +1,4 @@
-.PHONY: generate demo-data test lint
+.PHONY: generate demo-data test lint format
 
 PYTHON ?= python
 
@@ -11,5 +11,9 @@ demo-data:
 test: generate
 	$(PYTHON) -m pytest
 
+format:
+	$(PYTHON) -m yapf --in-place --recursive distributed_scheduler benchmarks examples tests cli.py
+
 lint:
 	$(PYTHON) -m ruff check .
+	$(PYTHON) -m yapf --diff --recursive distributed_scheduler benchmarks examples tests cli.py

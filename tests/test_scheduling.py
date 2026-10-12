@@ -3,7 +3,10 @@ from distributed_scheduler.scheduling import select_worker
 
 
 def workers():
-    return [Worker("host", port, 0, capacity) for port, capacity in [(1, 2), (2, 4), (3, 1)]]
+    return [
+        Worker("host", port, 0, capacity)
+        for port, capacity in [(1, 2), (2, 4), (3, 1)]
+    ]
 
 
 def test_first_available_uses_address_order_and_capacity():

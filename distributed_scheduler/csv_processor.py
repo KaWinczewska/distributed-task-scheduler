@@ -19,21 +19,25 @@ def process(input_path: str, output_path: str) -> None:
 
     with open(input_path, encoding="utf-8", newline="") as source:
         rows = csv.reader(source, strict=True)
-        expected = ["timestamp", "user_id", "endpoint", "status_code", "response_time_ms"]
+        expected = [
+            "timestamp", "user_id", "endpoint", "status_code",
+            "response_time_ms"
+        ]
 
         if next(rows, None) != expected:
             raise ValueError("invalid CSV header")
-        
+
         for fields in rows:
             if len(fields) != 5:
                 raise ValueError("each CSV row must contain five fields")
-            
+
             status = int(fields[3])
             response_time = int(fields[4])
 
             if not 100 <= status <= 599 or response_time < 0:
-                raise ValueError("invalid HTTP status or negative response time")
-            
+                raise ValueError(
+                    "invalid HTTP status or negative response time")
+
             total += 1
             if 200 <= status <= 399:
                 successful += 1
@@ -62,8 +66,10 @@ def process(input_path: str, output_path: str) -> None:
     output_path = os.path.abspath(output_path)
     parent = os.path.dirname(output_path)
     os.makedirs(parent, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=".csv-result-", suffix=".tmp", dir=parent)
-    
+    descriptor, temporary = tempfile.mkstemp(prefix=".csv-result-",
+                                             suffix=".tmp",
+                                             dir=parent)
+
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as target:
             json.dump(result, target, indent=2)
@@ -71,10 +77,11 @@ def process(input_path: str, output_path: str) -> None:
             os.chmod(temporary, 0o644)
 
         os.replace(temporary, output_path)
-        log.info("CSV processing finished input=%s rows=%s users=%s output=%s duration=%.2fs",
-                 input_path, f"{total:,}", f"{len(users):,}", output_path,
-                 time.monotonic() - started)
-        
+        log.info(
+            "CSV processing finished input=%s rows=%s users=%s output=%s duration=%.2fs",
+            input_path, f"{total:,}", f"{len(users):,}", output_path,
+            time.monotonic() - started)
+
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)

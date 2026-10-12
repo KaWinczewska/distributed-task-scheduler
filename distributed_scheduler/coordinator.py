@@ -63,12 +63,19 @@ class Worker:
 
 
 class Coordinator(services.CoordinatorServiceServicer):
-    def __init__(self, port: int, heartbeat_timeout: float = 6.0, scan_interval: float = 1.0,
-                 scheduler: str = "first-available", max_retries: int = 3,
-                 retry_backoff: float = 0.1, max_dispatches: int = 32,
+
+    def __init__(self,
+                 port: int,
+                 heartbeat_timeout: float = 6.0,
+                 scan_interval: float = 1.0,
+                 scheduler: str = "first-available",
+                 max_retries: int = 3,
+                 retry_backoff: float = 0.1,
+                 max_dispatches: int = 32,
                  metrics_port: int | None = None):
         if scheduler not in POLICIES or max_retries < 0 or max_dispatches < 1 or retry_backoff < 0:
-            raise ValueError("invalid scheduler, retry limit, backoff or dispatch limit")
+            raise ValueError(
+                "invalid scheduler, retry limit, backoff or dispatch limit")
         self.heartbeat_timeout = heartbeat_timeout
         self.scan_interval = scan_interval
         self.scheduler = scheduler
@@ -95,7 +102,8 @@ class Coordinator(services.CoordinatorServiceServicer):
         self.retry_count = 0
         self.created = time.perf_counter()
         self.threads: list[threading.Thread] = []
-        self.registry, self.duration_histogram, self.queue_histogram = create_metrics(self)
+        self.registry, self.duration_histogram, self.queue_histogram = create_metrics(
+            self)
         self.metrics_port = metrics_port
         self.metrics_server = None
         self.metrics_thread = None
@@ -110,7 +118,8 @@ class Coordinator(services.CoordinatorServiceServicer):
             thread = threading.Thread(target=target, daemon=True)
             thread.start()
             self.threads.append(thread)
-        log.info("coordinator started port=%d scheduler=%s", self.port, self.scheduler)
+        log.info("coordinator started port=%d scheduler=%s", self.port,
+                 self.scheduler)
         return self
 
     def wait(self):
@@ -147,7 +156,8 @@ class Coordinator(services.CoordinatorServiceServicer):
         with self.changed:
             self.next_id += 1
             job_id = f"job-{self.next_id}"
-            self.jobs[job_id] = Job(job_id, request.input_path, request.output_path)
+            self.jobs[job_id] = Job(job_id, request.input_path,
+                                    request.output_path)
             self.pending.append(job_id)
             self.changed.notify_all()
         return messages.SubmitJobResponse(job_id=job_id)
@@ -160,7 +170,8 @@ class Coordinator(services.CoordinatorServiceServicer):
 
     def RegisterWorker(self, request, context):
         if request.max_concurrent_jobs < 0:
-            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "capacity must be positive")
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT,
+                          "capacity must be positive")
         fresh = Worker(request.host, request.port, time.perf_counter(),
                        request.max_concurrent_jobs or 1, request.session_id)
         with self.changed:
@@ -189,10 +200,12 @@ class Coordinator(services.CoordinatorServiceServicer):
                     while self.delayed and self.delayed[0][0] <= now:
                         _, job_id = heapq.heappop(self.delayed)
                         self.pending.append(job_id)
-                    worker = select_worker(list(self.workers.values()), self.scheduler, self.previous_worker)
+                    worker = select_worker(list(self.workers.values()),
+                                           self.scheduler, self.previous_worker)
                     if self.pending and worker and self.inflight < self.max_dispatches:
                         break
-                    delay = max(0, self.delayed[0][0] - now) if self.delayed else None
+                    delay = max(0, self.delayed[0][0] -
+                                now) if self.delayed else None
                     self.changed.wait(timeout=delay)
                 job = self.jobs[self.pending.popleft()]
                 now = time.perf_counter()
@@ -204,29 +217,36 @@ class Coordinator(services.CoordinatorServiceServicer):
                 job.attempt_id = uuid.uuid4().hex
                 worker.jobs.add(job.id)
                 self.previous_worker = worker.key
-                self.assignments[worker.key] = self.assignments.get(worker.key, 0) + 1
+                self.assignments[worker.key] = self.assignments.get(
+                    worker.key, 0) + 1
                 self.inflight += 1
                 attempt = job.attempt
                 attempt_id = job.attempt_id
-            self.calls.submit(self._execute, job.id, worker, attempt, attempt_id)
+            self.calls.submit(self._execute, job.id, worker, attempt,
+                              attempt_id)
 
     def _is_current(self, job: Job, worker: Worker, attempt: int) -> bool:
-        return (job.status == messages.RUNNING and not job.publishing and job.attempt == attempt
-                and job.worker == worker.key and self.workers.get(worker.key) is worker)
+        return (job.status == messages.RUNNING and not job.publishing and
+                job.attempt == attempt and job.worker == worker.key and
+                self.workers.get(worker.key) is worker)
 
-    def _execute(self, job_id: str, worker: Worker, attempt: int, attempt_id: str):
+    def _execute(self, job_id: str, worker: Worker, attempt: int,
+                 attempt_id: str):
         job = self.jobs[job_id]
         staged = f"{job.output}.attempt-{attempt_id}"
         try:
             with grpc.insecure_channel(worker.key) as channel:
                 with self.lock:
-                    if self.stopping.is_set() or not self._is_current(job, worker, attempt):
+                    if self.stopping.is_set() or not self._is_current(
+                            job, worker, attempt):
                         return
                 call = services.WorkerServiceStub(channel).ExecuteJob.future(
-                    messages.ExecuteJobRequest(input_path=job.input, output_path=staged,
+                    messages.ExecuteJobRequest(input_path=job.input,
+                                               output_path=staged,
                                                attempt_id=attempt_id))
                 with self.lock:
-                    current = not self.stopping.is_set() and self._is_current(job, worker, attempt)
+                    current = not self.stopping.is_set() and self._is_current(
+                        job, worker, attempt)
                     if current:
                         self.rpc_calls[attempt_id] = call
                 if not current:
@@ -236,7 +256,8 @@ class Coordinator(services.CoordinatorServiceServicer):
                 self._accept_result(job, worker, attempt, response, staged)
         except (grpc.RpcError, grpc.FutureCancelledError) as error:
             with self.changed:
-                if self._is_current(job, worker, attempt) and not self.stopping.is_set():
+                if self._is_current(job, worker,
+                                    attempt) and not self.stopping.is_set():
                     self._remove_worker(worker, str(error))
                 self.changed.notify_all()
         finally:
@@ -252,7 +273,8 @@ class Coordinator(services.CoordinatorServiceServicer):
                 self.changed.notify_all()
 
     def _accept_result(self, job: Job, worker: Worker, attempt: int,
-                       response: messages.ExecuteJobResponse, staged: str) -> None:
+                       response: messages.ExecuteJobResponse,
+                       staged: str) -> None:
         with self.changed:
             if not self._is_current(job, worker, attempt):
                 return
@@ -295,14 +317,17 @@ class Coordinator(services.CoordinatorServiceServicer):
         job.status = messages.PENDING
         job.worker = None
         job.queued_at = time.perf_counter()
-        job.ready_at = job.queued_at + min(2.0, self.retry_backoff * 2 ** min(job.attempt - 1, 10))
+        job.ready_at = job.queued_at + min(
+            2.0, self.retry_backoff * 2**min(job.attempt - 1, 10))
         self.retry_count += 1
         heapq.heappush(self.delayed, (job.ready_at, job.id))
-        log.warning("job requeued id=%s attempt=%d reason=%s", job.id, job.attempt, reason)
+        log.warning("job requeued id=%s attempt=%d reason=%s", job.id,
+                    job.attempt, reason)
 
     def _remove_worker(self, worker: Worker, reason: str):
         self.workers.pop(worker.key, None)
-        for job_id in sorted(worker.jobs, key=lambda key: self.jobs[key].created):
+        for job_id in sorted(worker.jobs,
+                             key=lambda key: self.jobs[key].created):
             job = self.jobs[job_id]
             if job.status == messages.RUNNING and job.worker == worker.key:
                 call = self.rpc_calls.get(job.attempt_id)
@@ -323,26 +348,59 @@ class Coordinator(services.CoordinatorServiceServicer):
     def metrics(self) -> dict:
         with self.lock:
             now = time.perf_counter()
-            jobs = [{"id": job.id, "status": messages.JobStatus.Name(job.status),
-                     "worker": job.worker, "attempts": job.attempt, "error": job.error,
-                     "created_seconds": job.created - self.created,
-                     "started_seconds": job.started - self.created if job.started else None,
-                     "completed_seconds": job.completed - self.created if job.completed else None,
-                     "queue_seconds": job.queue_seconds + (now - job.queued_at if job.status == messages.PENDING else 0),
-                     "execution_seconds": job.execution_seconds,
-                     "latency_seconds": (job.completed or now) - job.created}
-                    for job in self.jobs.values()]
-            completed = sum(job.status == messages.COMPLETED for job in self.jobs.values())
-            return {"submitted": len(jobs), "completed": completed,
-                    "failed": sum(job.status == messages.FAILED for job in self.jobs.values()),
-                    "retries": self.retry_count, "active_workers": len(self.workers),
-                    "throughput": completed / (now - self.created),
-                    "assignments": dict(self.assignments), "jobs": jobs,
-                    "workers": [{"id": worker.key, "max_concurrent_jobs": worker.max_concurrent_jobs,
-                                 "active_jobs": worker.active_jobs,
-                                 "available_capacity": worker.available_capacity,
-                                 "heartbeat_age_seconds": now - worker.last_heartbeat}
-                                for worker in self.workers.values()]}
+            jobs = [{
+                "id":
+                    job.id,
+                "status":
+                    messages.JobStatus.Name(job.status),
+                "worker":
+                    job.worker,
+                "attempts":
+                    job.attempt,
+                "error":
+                    job.error,
+                "created_seconds":
+                    job.created - self.created,
+                "started_seconds":
+                    job.started - self.created if job.started else None,
+                "completed_seconds":
+                    job.completed - self.created if job.completed else None,
+                "queue_seconds":
+                    job.queue_seconds +
+                    (now -
+                     job.queued_at if job.status == messages.PENDING else 0),
+                "execution_seconds":
+                    job.execution_seconds,
+                "latency_seconds": (job.completed or now) - job.created
+            } for job in self.jobs.values()]
+            completed = sum(
+                job.status == messages.COMPLETED for job in self.jobs.values())
+            return {
+                "submitted":
+                    len(jobs),
+                "completed":
+                    completed,
+                "failed":
+                    sum(job.status == messages.FAILED
+                        for job in self.jobs.values()),
+                "retries":
+                    self.retry_count,
+                "active_workers":
+                    len(self.workers),
+                "throughput":
+                    completed / (now - self.created),
+                "assignments":
+                    dict(self.assignments),
+                "jobs":
+                    jobs,
+                "workers": [{
+                    "id": worker.key,
+                    "max_concurrent_jobs": worker.max_concurrent_jobs,
+                    "active_jobs": worker.active_jobs,
+                    "available_capacity": worker.available_capacity,
+                    "heartbeat_age_seconds": now - worker.last_heartbeat
+                } for worker in self.workers.values()]
+            }
 
     def GetMetrics(self, request, context):
         return messages.MetricsResponse(json=json.dumps(self.metrics()))

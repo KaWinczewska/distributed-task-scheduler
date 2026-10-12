@@ -12,16 +12,19 @@ from distributed_scheduler.worker import Worker
 
 
 class Client:
+
     def __init__(self, port: int):
         self.channel = grpc.insecure_channel(f"127.0.0.1:{port}")
         self.stub = services.CoordinatorServiceStub(self.channel)
 
     def submit(self, input_path, output_path) -> str:
-        return self.stub.SubmitJob(messages.SubmitJobRequest(
-            input_path=str(input_path), output_path=str(output_path))).job_id
+        return self.stub.SubmitJob(
+            messages.SubmitJobRequest(input_path=str(input_path),
+                                      output_path=str(output_path))).job_id
 
     def status(self, job_id: str) -> int:
-        return self.stub.GetJobStatus(messages.GetJobStatusRequest(job_id=job_id)).status
+        return self.stub.GetJobStatus(
+            messages.GetJobStatusRequest(job_id=job_id)).status
 
     def close(self):
         self.channel.close()
@@ -47,7 +50,8 @@ def await_until(condition, timeout=5):
 
 
 def test_normal_execution_produces_expected_metrics(tmp_path):
-    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
+    with Coordinator(0) as coordinator, Worker("127.0.0.1", coordinator.port,
+                                               "127.0.0.1", 0):
         client = Client(coordinator.port)
         try:
             output = tmp_path / "result.json"
@@ -61,7 +65,11 @@ def test_normal_execution_produces_expected_metrics(tmp_path):
                 "averageResponseTimeMs": 275.0,
                 "maxResponseTimeMs": 500,
                 "uniqueUsers": 3,
-                "requestsByEndpoint": {"/api/orders": 1, "/api/products": 1, "/api/search": 2},
+                "requestsByEndpoint": {
+                    "/api/orders": 1,
+                    "/api/products": 1,
+                    "/api/search": 2
+                },
             }
         finally:
             client.close()
@@ -89,8 +97,10 @@ def test_two_workers_run_jobs_in_parallel(tmp_path):
              Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0, slow):
             client = Client(coordinator.port)
             try:
-                first = client.submit(tmp_path / "one.csv", tmp_path / "one.json")
-                second = client.submit(tmp_path / "two.csv", tmp_path / "two.json")
+                first = client.submit(tmp_path / "one.csv",
+                                      tmp_path / "one.json")
+                second = client.submit(tmp_path / "two.csv",
+                                       tmp_path / "two.json")
                 assert both_started.wait(3), "jobs did not execute concurrently"
                 release.set()
                 await_until(lambda: client.status(first) == messages.COMPLETED
@@ -102,10 +112,12 @@ def test_two_workers_run_jobs_in_parallel(tmp_path):
 
 
 def test_worker_without_heartbeats_times_out():
-    with Coordinator(0, heartbeat_timeout=0.2, scan_interval=0.025) as coordinator:
+    with Coordinator(0, heartbeat_timeout=0.2,
+                     scan_interval=0.025) as coordinator:
         client = Client(coordinator.port)
         try:
-            client.stub.RegisterWorker(messages.RegisterWorkerRequest(host="127.0.0.1", port=12345))
+            client.stub.RegisterWorker(
+                messages.RegisterWorkerRequest(host="127.0.0.1", port=12345))
             assert coordinator.worker_count == 1
             await_until(lambda: coordinator.worker_count == 0)
         finally:
@@ -113,7 +125,9 @@ def test_worker_without_heartbeats_times_out():
 
 
 def test_rpc_failure_requeues_job_for_another_worker(tmp_path):
+
     class BrokenWorker(services.WorkerServiceServicer):
+
         def ExecuteJob(self, request, context):
             context.abort(grpc.StatusCode.UNAVAILABLE, "worker stopped")
 
@@ -125,14 +139,17 @@ def test_rpc_failure_requeues_job_for_another_worker(tmp_path):
         with Coordinator(0) as coordinator:
             client = Client(coordinator.port)
             try:
-                client.stub.RegisterWorker(messages.RegisterWorkerRequest(
-                    host="127.0.0.1", port=broken_port))
+                client.stub.RegisterWorker(
+                    messages.RegisterWorkerRequest(host="127.0.0.1",
+                                                   port=broken_port))
                 output = tmp_path / "retried.json"
-                job_id = client.submit(sample_csv(tmp_path / "input.csv"), output)
-                await_until(lambda: coordinator.worker_count == 0
-                            and client.status(job_id) == messages.PENDING)
+                job_id = client.submit(sample_csv(tmp_path / "input.csv"),
+                                       output)
+                await_until(lambda: coordinator.worker_count == 0 and client.
+                            status(job_id) == messages.PENDING)
                 with Worker("127.0.0.1", coordinator.port, "127.0.0.1", 0):
-                    await_until(lambda: client.status(job_id) == messages.COMPLETED)
+                    await_until(
+                        lambda: client.status(job_id) == messages.COMPLETED)
                     assert output.exists()
             finally:
                 client.close()
@@ -141,6 +158,7 @@ def test_rpc_failure_requeues_job_for_another_worker(tmp_path):
 
 
 def test_processing_error_marks_job_failed(tmp_path):
+
     def fail(input_path, output_path):
         raise ValueError("bad CSV")
 

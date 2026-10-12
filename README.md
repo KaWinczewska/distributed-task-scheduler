@@ -194,8 +194,13 @@ and profiling commands are in [the measurement guide](docs/architecture.md#bench
 ```sh
 python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. distributed_scheduler/distributed_jobs.proto
 python -m ruff check .
+python -m yapf --diff --recursive distributed_scheduler benchmarks examples tests cli.py
 python -m pytest -q
 ```
+
+Python code uses YAPF's `google` formatting profile, configured in
+`pyproject.toml`. Run `make format` to apply it. Generated protobuf bindings
+are excluded from formatting.
 
 Tests cover CSV statistics, all selection policies, concurrent submissions,
 capacity, heartbeats, retries, stale/duplicate results, atomic publication,

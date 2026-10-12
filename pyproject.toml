@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = ["grpcio>=1.84", "protobuf>=7.35.1", "prometheus-client>=0.22"]
 
 [project.optional-dependencies]
-dev = ["grpcio-tools>=1.84", "pytest>=8.4", "ruff>=0.11", "psutil>=7"]
+dev = ["grpcio-tools>=1.84", "pytest>=8.4", "ruff>=0.11", "psutil>=7", "yapf==0.43.0"]
 
 [project.scripts]
 distributed-scheduler = "distributed_scheduler.cli:main"
@@ -28,7 +28,14 @@ distributed_scheduler = ["*.proto"]
 testpaths = ["tests"]
 markers = ["integration: separate-process fault injection (local TCP required)"]
 
+[tool.yapf]
+based_on_style = "google"
+
+[tool.yapfignore]
+ignore_patterns = ["distributed_scheduler/distributed_jobs_pb2.py", "distributed_scheduler/distributed_jobs_pb2_grpc.py"]
+
 [tool.ruff]
+line-length = 80
 target-version = "py310"
 extend-exclude = ["distributed_jobs_pb2.py", "distributed_jobs_pb2_grpc.py"]
 
